@@ -317,7 +317,7 @@ export default function ResultsReveal() {
                     animate={{
                       opacity: 1,
                       scale: [0, 1.4, 1],
-                      rotate: [−15, 5, 0],
+                      rotate: [-15, 5, 0],
                     }}
                     transition={{
                       duration: 0.6,
