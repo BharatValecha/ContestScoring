@@ -100,7 +100,10 @@ export default function ResultsReveal() {
     const judgeCount = currentResult.judgeBreakdown.length;
 
     if (revealedJudgeCount < judgeCount) {
-      const t = setTimeout(() => setRevealedJudgeCount((c) => c + 1), timings.judgeDelay);
+      const t = setTimeout(() => {
+        playDrumroll();
+        setRevealedJudgeCount((c) => c + 1);
+      }, timings.judgeDelay);
       return () => clearTimeout(t);
     } else if (!showTotal) {
       const t = setTimeout(() => setShowTotal(true), timings.totalDelay);
