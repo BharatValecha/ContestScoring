@@ -10,7 +10,6 @@ import AdminLayout from "@/components/AdminLayout";
 import AdminDashboard from "@/pages/admin/Dashboard";
 import EventsPage from "@/pages/admin/Events";
 import EventDetail from "@/pages/admin/EventDetail";
-import ParticipantsPage from "@/pages/admin/Participants";
 import JudgesPage from "@/pages/admin/Judges";
 import JudgeDashboard from "@/pages/judge/JudgeDashboard";
 import ResultsReveal from "@/pages/ResultsReveal";
@@ -37,7 +36,6 @@ function AppRoutes() {
           <Route index element={<AdminDashboard />} />
           <Route path="events" element={<EventsPage />} />
           <Route path="events/:eventId" element={<EventDetail />} />
-          <Route path="participants" element={<ParticipantsPage />} />
           <Route path="judges" element={<JudgesPage />} />
         </Route>
         <Route path="/results/:eventId" element={<ResultsReveal />} />
@@ -47,7 +45,6 @@ function AppRoutes() {
     );
   }
 
-  // Judge
   return (
     <Routes>
       <Route path="/" element={<JudgeDashboard />} />

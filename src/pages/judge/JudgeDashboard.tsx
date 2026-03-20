@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { getEvents, getEvent, getParticipants, getScoreByJudgeAndParticipant, submitScore } from "@/lib/store";
+import { getEvents, getEvent, getScoreByJudgeAndParticipant, submitScore } from "@/lib/store";
 import { AppEvent, Participant } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,8 +29,7 @@ export default function JudgeDashboard() {
 
   const selectEvent = (event: AppEvent) => {
     setSelectedEvent(event);
-    const allP = getParticipants();
-    setParticipants(allP.filter((p) => event.participantIds.includes(p.id)));
+    setParticipants(event.participants || []);
     setSelectedParticipant(null);
   };
 
@@ -47,6 +46,13 @@ export default function JudgeDashboard() {
       setScores(initial);
       setComment("");
     }
+  };
+
+  const handleScoreChange = (criterionId: string, value: string, maxScore: number) => {
+    const num = value === "" ? 0 : Number(value);
+    if (isNaN(num)) return;
+    const clamped = Math.min(Math.max(0, num), maxScore);
+    setScores({ ...scores, [criterionId]: clamped });
   };
 
   const handleSubmit = () => {
@@ -98,7 +104,7 @@ export default function JudgeDashboard() {
                 <CardContent className="p-5">
                   <h3 className="font-semibold">{event.name}</h3>
                   <p className="text-sm text-muted-foreground mt-0.5">{event.description || "No description"}</p>
-                  <p className="text-xs text-muted-foreground mt-2">{event.participantIds.length} participants · {event.criteria.length} criteria</p>
+                  <p className="text-xs text-muted-foreground mt-2">{(event.participants || []).length} participants · {event.criteria.length} criteria</p>
                 </CardContent>
               </Card>
             ))}
@@ -154,17 +160,16 @@ export default function JudgeDashboard() {
                 <div key={c.id} className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm font-medium">{c.name}</Label>
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {scores[c.id] || 0} / {c.maxScore}
-                    </span>
+                    <span className="text-xs text-muted-foreground">max {c.maxScore}</span>
                   </div>
                   <Input
-                    type="range"
+                    type="number"
                     min={0}
                     max={c.maxScore}
                     value={scores[c.id] || 0}
-                    onChange={(e) => setScores({ ...scores, [c.id]: Number(e.target.value) })}
-                    className="h-2 cursor-pointer"
+                    onChange={(e) => handleScoreChange(c.id, e.target.value, c.maxScore)}
+                    className="tabular-nums"
+                    placeholder={`0 - ${c.maxScore}`}
                   />
                 </div>
               ))}
