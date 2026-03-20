@@ -199,6 +199,7 @@ export default function ResultsReveal() {
   const startPresentation = () => {
     setCurrentParticipantIdx(0);
     setRevealedJudgeCount(0);
+    setRevealedLeaderboardCount(0);
     setShowTotal(false);
     confettiFired.current = false;
     setPhase("loading");
