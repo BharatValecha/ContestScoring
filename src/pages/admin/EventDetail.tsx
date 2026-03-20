@@ -6,7 +6,6 @@ import {
   assignParticipantToEvent, removeParticipantFromEvent,
   assignJudgeToEvent, removeJudgeFromEvent,
   addCriterion, removeCriterion,
-  calculateResults,
 } from "@/lib/store";
 import { AppEvent, Participant, Judge } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -15,7 +14,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, X, Trophy, ArrowLeft } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Plus, X, Trophy, ArrowLeft, Pencil } from "lucide-react";
+import { toast } from "sonner";
 
 export default function EventDetail() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -26,14 +27,44 @@ export default function EventDetail() {
   const [criterionName, setCriterionName] = useState("");
   const [criterionMax, setCriterionMax] = useState("10");
 
+  // Edit dialog state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editStart, setEditStart] = useState("");
+  const [editEnd, setEditEnd] = useState("");
+
   const refresh = () => {
     if (!eventId) return;
-    setEvent(getEvent(eventId) || null);
+    const ev = getEvent(eventId) || null;
+    setEvent(ev);
     setAllParticipants(getParticipants());
     setAllJudges(getJudges());
   };
 
   useEffect(refresh, [eventId]);
+
+  const openEdit = () => {
+    if (!event) return;
+    setEditName(event.name);
+    setEditDesc(event.description);
+    setEditStart(event.startDate);
+    setEditEnd(event.endDate);
+    setEditOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!event || !editName.trim()) return;
+    updateEvent(event.id, {
+      name: editName,
+      description: editDesc,
+      startDate: editStart,
+      endDate: editEnd,
+    });
+    toast.success("Event updated");
+    setEditOpen(false);
+    refresh();
+  };
 
   if (!event) return <p className="text-muted-foreground">Event not found.</p>;
 
@@ -61,16 +92,54 @@ export default function EventDetail() {
         <Button variant="ghost" size="icon" onClick={() => navigate("/admin/events")}>
           <ArrowLeft className="w-4 h-4" />
         </Button>
-        <div>
-          <h1 className="text-2xl font-bold">{event.name}</h1>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold">{event.name}</h1>
+            <Button variant="ghost" size="icon" onClick={openEdit} className="text-muted-foreground">
+              <Pencil className="w-4 h-4" />
+            </Button>
+          </div>
           <p className="text-sm text-muted-foreground">ID: {event.id}</p>
+          {event.description && (
+            <p className="text-sm text-muted-foreground mt-0.5">{event.description}</p>
+          )}
         </div>
-        <div className="ml-auto">
-          <Button onClick={handleRevealResults} className="bg-accent text-accent-foreground hover:bg-accent/90 active:scale-[0.97]">
-            <Trophy className="w-4 h-4 mr-2" /> Reveal Results
-          </Button>
-        </div>
+        <Button onClick={handleRevealResults} className="bg-accent text-accent-foreground hover:bg-accent/90 active:scale-[0.97]">
+          <Trophy className="w-4 h-4 mr-2" /> Reveal Results
+        </Button>
       </div>
+
+      {/* Edit Event Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Event</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>Event Name</Label>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Start Date</Label>
+                <Input type="date" value={editStart} onChange={(e) => setEditStart(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>End Date</Label>
+                <Input type="date" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} />
+              </div>
+            </div>
+            <Button onClick={handleSaveEdit} className="w-full bg-primary text-primary-foreground active:scale-[0.97]">
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Tabs defaultValue="participants">
         <TabsList>
@@ -129,7 +198,7 @@ export default function EventDetail() {
           {unassignedJudges.length > 0 && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Available to add</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Available to assign</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-wrap gap-2">
                 {unassignedJudges.map((j) => (
@@ -147,7 +216,7 @@ export default function EventDetail() {
             </Card>
           )}
           {allJudges.length === 0 && (
-            <p className="text-sm text-muted-foreground">No judges created yet. Go to Judges page first.</p>
+            <p className="text-sm text-muted-foreground">No judges registered yet. Judges can sign up from the login page.</p>
           )}
         </TabsContent>
 
