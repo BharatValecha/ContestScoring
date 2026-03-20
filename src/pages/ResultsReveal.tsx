@@ -106,7 +106,10 @@ export default function ResultsReveal() {
       }, timings.judgeDelay);
       return () => clearTimeout(t);
     } else if (!showTotal) {
-      const t = setTimeout(() => setShowTotal(true), timings.totalDelay);
+      const t = setTimeout(() => {
+        playFanfare();
+        setShowTotal(true);
+      }, timings.totalDelay);
       return () => clearTimeout(t);
     } else {
       const t = setTimeout(() => {
