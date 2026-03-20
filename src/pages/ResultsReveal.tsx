@@ -134,16 +134,27 @@ export default function ResultsReveal() {
     }
   }, [phase]);
 
-  // Confetti for winner
+  // Leaderboard sequential reveal (last place → first place)
+  const leaderboardRevealOrder = [...results].reverse(); // last place first
   useEffect(() => {
-    if (phase === "leaderboard" && results.length > 0 && !confettiFired.current) {
+    if (phase !== "leaderboard" || results.length === 0) return;
+    if (revealedLeaderboardCount >= results.length) return;
+    const t = setTimeout(() => {
+      setRevealedLeaderboardCount((c) => c + 1);
+    }, 800);
+    return () => clearTimeout(t);
+  }, [phase, revealedLeaderboardCount, results.length]);
+
+  // Confetti when all revealed
+  useEffect(() => {
+    if (phase === "leaderboard" && revealedLeaderboardCount >= results.length && results.length > 0 && !confettiFired.current) {
       confettiFired.current = true;
       setTimeout(() => {
         playVictoryFanfare();
         confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ["#d4a017", "#c0c0c0", "#cd7f32", "#ffffff"] });
       }, 400);
     }
-  }, [phase, results.length]);
+  }, [phase, revealedLeaderboardCount, results.length]);
 
   // Manual controls
   const manualNext = useCallback(() => {
