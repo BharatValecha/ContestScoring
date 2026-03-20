@@ -135,7 +135,7 @@ export default function ResultsReveal() {
   }, [phase]);
 
   // Leaderboard sequential reveal (last place → first place)
-  const leaderboardRevealOrder = [...results].reverse(); // last place first
+  // Leaderboard sequential reveal (last place first, filling bottom-up)
   useEffect(() => {
     if (phase !== "leaderboard" || results.length === 0) return;
     if (revealedLeaderboardCount >= results.length) return;
@@ -467,18 +467,39 @@ export default function ResultsReveal() {
         </div>
 
         <div className="space-y-3">
-          {leaderboardRevealOrder.slice(0, revealedLeaderboardCount).map((r, revealIdx) => {
-            const actualRank = results.indexOf(r);
-            const isTop3 = actualRank < 3;
+          {/* Render all slots in rank order (1st to last). Reveal fills from bottom up. */}
+          {results.map((r, rankIdx) => {
+            // How many have been revealed so far (from last place)
+            // revealedLeaderboardCount items revealed, starting from last place
+            const posFromEnd = results.length - 1 - rankIdx; // 0 = last place, length-1 = 1st place
+            const isRevealed = posFromEnd < revealedLeaderboardCount;
+            const isTop3 = rankIdx < 3;
+
+            if (!isRevealed) {
+              return (
+                <div key={`placeholder-${rankIdx}`} className="h-[72px]">
+                  <Card className="h-full border-dashed border-muted-foreground/15">
+                    <CardContent className="p-5 flex items-center gap-4">
+                      <div className="w-8 h-8 flex items-center justify-center">
+                        <span className="text-sm font-bold text-muted-foreground/30 tabular-nums">
+                          #{rankIdx + 1}
+                        </span>
+                      </div>
+                      <div className="h-4 w-32 rounded bg-muted-foreground/10 animate-pulse" />
+                    </CardContent>
+                  </Card>
+                </div>
+              );
+            }
+
             return (
               <motion.div
                 key={r.participantId}
                 initial={{ opacity: 0, x: -60, scale: 0.85, filter: "blur(8px)" }}
                 animate={{ opacity: 1, x: 0, scale: 1, filter: "blur(0px)" }}
                 transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                layout
               >
-                <Card className={`transition-all ${isTop3 ? rankStyles[actualRank] : "shadow-sm"}`}>
+                <Card className={`transition-all ${isTop3 ? rankStyles[rankIdx] : "shadow-sm"}`}>
                   <CardContent className="p-5">
                     <div
                       className="flex items-center justify-between cursor-pointer"
@@ -489,10 +510,10 @@ export default function ResultsReveal() {
                       <div className="flex items-center gap-4">
                         <div className="w-8 h-8 flex items-center justify-center">
                           {isTop3 ? (
-                            rankIcons[actualRank]
+                            rankIcons[rankIdx]
                           ) : (
                             <span className="text-sm font-bold text-muted-foreground tabular-nums">
-                              #{actualRank + 1}
+                              #{rankIdx + 1}
                             </span>
                           )}
                         </div>
@@ -500,7 +521,7 @@ export default function ResultsReveal() {
                           <p className="font-semibold">{r.participantName}</p>
                           {isTop3 && (
                             <p className="text-xs text-muted-foreground">
-                              {actualRank === 0 ? "🥇 Gold" : actualRank === 1 ? "🥈 Silver" : "🥉 Bronze"}
+                              {rankIdx === 0 ? "🥇 Gold" : rankIdx === 1 ? "🥈 Silver" : "🥉 Bronze"}
                             </p>
                           )}
                         </div>
