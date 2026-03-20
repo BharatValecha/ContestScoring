@@ -153,8 +153,10 @@ export default function ResultsReveal() {
     const judgeCount = currentResult.judgeBreakdown.length;
 
     if (revealedJudgeCount < judgeCount) {
+      playDrumroll();
       setRevealedJudgeCount((c) => c + 1);
     } else if (!showTotal) {
+      playFanfare();
       setShowTotal(true);
     } else {
       if (currentParticipantIdx < revealOrder.length - 1) {
