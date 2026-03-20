@@ -138,6 +138,7 @@ export default function ResultsReveal() {
     if (phase === "leaderboard" && results.length > 0 && !confettiFired.current) {
       confettiFired.current = true;
       setTimeout(() => {
+        playVictoryFanfare();
         confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ["#d4a017", "#c0c0c0", "#cd7f32", "#ffffff"] });
       }, 400);
     }
