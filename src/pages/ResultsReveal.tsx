@@ -71,6 +71,7 @@ export default function ResultsReveal() {
 
   // Leaderboard state
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [revealedLeaderboardCount, setRevealedLeaderboardCount] = useState(0);
   const confettiFired = useRef(false);
 
   useEffect(() => {
