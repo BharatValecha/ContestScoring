@@ -33,8 +33,8 @@ export default function Signup() {
       return;
     }
 
-    // Check if email already exists
-    const { getJudges } = require("@/lib/store");
+    // Check if email already exists (getJudges imported at top via store)
+    const { getJudges } = await import("@/lib/store");
     const existing = getJudges().find((j: any) => j.email === email);
     if (existing) {
       setError("An account with this email already exists");
