@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Login from "@/pages/Login";
+import Signup from "@/pages/Signup";
 import AdminLayout from "@/components/AdminLayout";
 import AdminDashboard from "@/pages/admin/Dashboard";
 import EventsPage from "@/pages/admin/Events";
@@ -23,6 +24,7 @@ function AppRoutes() {
   if (!user) {
     return (
       <Routes>
+        <Route path="/signup" element={<Signup />} />
         <Route path="*" element={<Login />} />
       </Routes>
     );
