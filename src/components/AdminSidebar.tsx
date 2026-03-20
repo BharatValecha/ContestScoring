@@ -1,12 +1,11 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { NavLink, useLocation } from "react-router-dom";
-import { CalendarDays, Users, Gavel, LogOut, Trophy, LayoutDashboard } from "lucide-react";
+import { CalendarDays, Gavel, LogOut, Trophy, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/admin/events", label: "Events", icon: CalendarDays },
-  { to: "/admin/participants", label: "Participants", icon: Users },
   { to: "/admin/judges", label: "Judges", icon: Gavel },
 ];
 

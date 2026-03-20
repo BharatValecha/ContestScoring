@@ -1,16 +1,17 @@
 import { useState } from "react";
-import { getEvents, getParticipants, getJudges } from "@/lib/store";
+import { getEvents, getJudges } from "@/lib/store";
 import { CalendarDays, Users, Gavel, Trophy } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
 export default function AdminDashboard() {
   const [events] = useState(getEvents);
-  const [participants] = useState(getParticipants);
   const [judges] = useState(getJudges);
+
+  const totalParticipants = events.reduce((sum, e) => sum + (e.participants || []).length, 0);
 
   const stats = [
     { label: "Events", value: events.length, icon: CalendarDays, color: "text-accent" },
-    { label: "Participants", value: participants.length, icon: Users, color: "text-success" },
+    { label: "Participants", value: totalParticipants, icon: Users, color: "text-success" },
     { label: "Judges", value: judges.length, icon: Gavel, color: "text-muted-foreground" },
     { label: "Completed", value: events.filter((e) => e.resultsRevealed).length, icon: Trophy, color: "text-gold" },
   ];
