@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { playDrumroll, playFanfare, playVictoryFanfare } from "@/lib/sounds";
 import { useParams, useNavigate } from "react-router-dom";
 import { getEvent, calculateResults, getJudges } from "@/lib/store";
 import { ParticipantResult } from "@/lib/store";
@@ -99,10 +100,16 @@ export default function ResultsReveal() {
     const judgeCount = currentResult.judgeBreakdown.length;
 
     if (revealedJudgeCount < judgeCount) {
-      const t = setTimeout(() => setRevealedJudgeCount((c) => c + 1), timings.judgeDelay);
+      const t = setTimeout(() => {
+        playDrumroll();
+        setRevealedJudgeCount((c) => c + 1);
+      }, timings.judgeDelay);
       return () => clearTimeout(t);
     } else if (!showTotal) {
-      const t = setTimeout(() => setShowTotal(true), timings.totalDelay);
+      const t = setTimeout(() => {
+        playFanfare();
+        setShowTotal(true);
+      }, timings.totalDelay);
       return () => clearTimeout(t);
     } else {
       const t = setTimeout(() => {
@@ -131,6 +138,7 @@ export default function ResultsReveal() {
     if (phase === "leaderboard" && results.length > 0 && !confettiFired.current) {
       confettiFired.current = true;
       setTimeout(() => {
+        playVictoryFanfare();
         confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ["#d4a017", "#c0c0c0", "#cd7f32", "#ffffff"] });
       }, 400);
     }
@@ -145,8 +153,10 @@ export default function ResultsReveal() {
     const judgeCount = currentResult.judgeBreakdown.length;
 
     if (revealedJudgeCount < judgeCount) {
+      playDrumroll();
       setRevealedJudgeCount((c) => c + 1);
     } else if (!showTotal) {
+      playFanfare();
       setShowTotal(true);
     } else {
       if (currentParticipantIdx < revealOrder.length - 1) {
