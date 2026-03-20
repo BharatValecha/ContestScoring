@@ -2,27 +2,25 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   getEvent, updateEvent,
-  getParticipants, getJudges,
-  assignParticipantToEvent, removeParticipantFromEvent,
+  getJudges,
   assignJudgeToEvent, removeJudgeFromEvent,
   addCriterion, removeCriterion,
 } from "@/lib/store";
-import { AppEvent, Participant, Judge } from "@/lib/types";
+import { AppEvent, Judge, Participant } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, X, Trophy, ArrowLeft, Pencil } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Plus, X, Trophy, ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function EventDetail() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const [event, setEvent] = useState<AppEvent | null>(null);
-  const [allParticipants, setAllParticipants] = useState<Participant[]>([]);
   const [allJudges, setAllJudges] = useState<Judge[]>([]);
   const [criterionName, setCriterionName] = useState("");
   const [criterionMax, setCriterionMax] = useState("10");
@@ -34,11 +32,15 @@ export default function EventDetail() {
   const [editStart, setEditStart] = useState("");
   const [editEnd, setEditEnd] = useState("");
 
+  // Add participant dialog state
+  const [addParticipantOpen, setAddParticipantOpen] = useState(false);
+  const [newParticipantName, setNewParticipantName] = useState("");
+  const [newParticipantEmail, setNewParticipantEmail] = useState("");
+
   const refresh = () => {
     if (!eventId) return;
     const ev = getEvent(eventId) || null;
     setEvent(ev);
-    setAllParticipants(getParticipants());
     setAllJudges(getJudges());
   };
 
@@ -66,12 +68,34 @@ export default function EventDetail() {
     refresh();
   };
 
+  const handleAddParticipant = () => {
+    if (!event || !newParticipantName.trim()) return;
+    const newP: Participant = {
+      id: Math.random().toString(36).substring(2, 10),
+      name: newParticipantName,
+      email: newParticipantEmail || undefined,
+    };
+    const updatedParticipants = [...(event.participants || []), newP];
+    updateEvent(event.id, { participants: updatedParticipants });
+    setNewParticipantName("");
+    setNewParticipantEmail("");
+    setAddParticipantOpen(false);
+    toast.success("Participant added");
+    refresh();
+  };
+
+  const handleRemoveParticipant = (pId: string) => {
+    if (!event) return;
+    const updatedParticipants = (event.participants || []).filter((p) => p.id !== pId);
+    updateEvent(event.id, { participants: updatedParticipants });
+    refresh();
+  };
+
   if (!event) return <p className="text-muted-foreground">Event not found.</p>;
 
-  const assignedParticipants = allParticipants.filter((p) => event.participantIds.includes(p.id));
-  const unassignedParticipants = allParticipants.filter((p) => !event.participantIds.includes(p.id));
   const assignedJudges = allJudges.filter((j) => event.judgeIds.includes(j.id));
   const unassignedJudges = allJudges.filter((j) => !event.judgeIds.includes(j.id));
+  const eventParticipants = event.participants || [];
 
   const handleAddCriterion = () => {
     if (!criterionName.trim()) return;
@@ -141,46 +165,62 @@ export default function EventDetail() {
         </DialogContent>
       </Dialog>
 
+      {/* Add Participant Dialog */}
+      <Dialog open={addParticipantOpen} onOpenChange={setAddParticipantOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Participant</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input value={newParticipantName} onChange={(e) => setNewParticipantName(e.target.value)} placeholder="Alex Chen" />
+            </div>
+            <div className="space-y-2">
+              <Label>Email (optional)</Label>
+              <Input value={newParticipantEmail} onChange={(e) => setNewParticipantEmail(e.target.value)} placeholder="alex@email.com" />
+            </div>
+            <Button onClick={handleAddParticipant} className="w-full bg-primary text-primary-foreground active:scale-[0.97]">Add</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Tabs defaultValue="participants">
         <TabsList>
-          <TabsTrigger value="participants">Participants ({assignedParticipants.length})</TabsTrigger>
+          <TabsTrigger value="participants">Participants ({eventParticipants.length})</TabsTrigger>
           <TabsTrigger value="judges">Judges ({assignedJudges.length})</TabsTrigger>
           <TabsTrigger value="criteria">Criteria ({event.criteria.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="participants" className="mt-4 space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {assignedParticipants.map((p) => (
-              <Badge key={p.id} variant="secondary" className="py-1.5 px-3 gap-2">
-                {p.name}
-                <button onClick={() => { removeParticipantFromEvent(event.id, p.id); refresh(); }}>
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            ))}
+          <div className="flex justify-end">
+            <Button onClick={() => setAddParticipantOpen(true)} className="bg-primary text-primary-foreground active:scale-[0.97]">
+              <Plus className="w-4 h-4 mr-2" /> Add Participant
+            </Button>
           </div>
-          {unassignedParticipants.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Available to add</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
-                {unassignedParticipants.map((p) => (
-                  <Button
-                    key={p.id}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => { assignParticipantToEvent(event.id, p.id); refresh(); }}
-                    className="active:scale-[0.97]"
-                  >
-                    <Plus className="w-3 h-3 mr-1" /> {p.name}
-                  </Button>
-                ))}
+          {eventParticipants.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="p-12 text-center text-muted-foreground">
+                <p className="font-medium">No participants yet</p>
+                <p className="text-sm mt-1">Add participants to this event</p>
               </CardContent>
             </Card>
-          )}
-          {allParticipants.length === 0 && (
-            <p className="text-sm text-muted-foreground">No participants created yet. Go to Participants page first.</p>
+          ) : (
+            <div className="grid gap-2">
+              {eventParticipants.map((p) => (
+                <Card key={p.id} className="shadow-sm">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-sm">{p.name}</p>
+                      {p.email && <p className="text-xs text-muted-foreground">{p.email}</p>}
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => handleRemoveParticipant(p.id)} className="text-muted-foreground hover:text-destructive">
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           )}
         </TabsContent>
 

@@ -7,7 +7,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Trophy, Medal, Award, ChevronDown, ChevronUp } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ArrowLeft, ArrowRight, Trophy, Medal, Award, ChevronDown, ChevronUp, Play, SkipForward } from "lucide-react";
 
 /* ── Animated counter ── */
 function CountUp({ end, duration = 1.2 }: { end: number; duration?: number }) {
@@ -30,7 +31,15 @@ function CountUp({ end, duration = 1.2 }: { end: number; duration?: number }) {
 }
 
 /* ── Types ── */
-type Phase = "loading" | "participant-reveal" | "leaderboard";
+type Phase = "setup" | "loading" | "participant-reveal" | "leaderboard";
+type PresentationMode = "auto" | "manual";
+type Speed = "slow" | "normal" | "fast";
+
+const speedTimings: Record<Speed, { judgeDelay: number; totalDelay: number; nextDelay: number }> = {
+  slow: { judgeDelay: 1500, totalDelay: 1000, nextDelay: 3000 },
+  normal: { judgeDelay: 900, totalDelay: 600, nextDelay: 1800 },
+  fast: { judgeDelay: 500, totalDelay: 300, nextDelay: 1000 },
+};
 
 const rankStyles: Record<number, string> = {
   0: "border-gold bg-gold/5 shadow-[0_0_24px_4px_hsl(var(--gold)/0.2)]",
@@ -50,7 +59,9 @@ export default function ResultsReveal() {
   const [event, setEvent] = useState<AppEvent | null>(null);
   const [results, setResults] = useState<ParticipantResult[]>([]);
   const [judges, setJudges] = useState<Judge[]>([]);
-  const [phase, setPhase] = useState<Phase>("loading");
+  const [phase, setPhase] = useState<Phase>("setup");
+  const [mode, setMode] = useState<PresentationMode>("auto");
+  const [speed, setSpeed] = useState<Speed>("normal");
 
   // Participant-reveal state
   const [currentParticipantIdx, setCurrentParticipantIdx] = useState(0);
@@ -73,18 +84,11 @@ export default function ResultsReveal() {
 
   // Reveal order: last place to first place
   const revealOrder = [...results].reverse();
+  const timings = speedTimings[speed];
 
-  // Loading → participant-reveal
+  // Auto mode sequencing
   useEffect(() => {
-    if (phase === "loading") {
-      const t = setTimeout(() => setPhase("participant-reveal"), 2500);
-      return () => clearTimeout(t);
-    }
-  }, [phase]);
-
-  // Participant reveal sequencing
-  useEffect(() => {
-    if (phase !== "participant-reveal" || revealOrder.length === 0) return;
+    if (mode !== "auto" || phase !== "participant-reveal" || revealOrder.length === 0) return;
 
     const currentResult = revealOrder[currentParticipantIdx];
     if (!currentResult) {
@@ -95,15 +99,12 @@ export default function ResultsReveal() {
     const judgeCount = currentResult.judgeBreakdown.length;
 
     if (revealedJudgeCount < judgeCount) {
-      // Reveal next judge score
-      const t = setTimeout(() => setRevealedJudgeCount((c) => c + 1), 900);
+      const t = setTimeout(() => setRevealedJudgeCount((c) => c + 1), timings.judgeDelay);
       return () => clearTimeout(t);
     } else if (!showTotal) {
-      // Show total after all judges revealed
-      const t = setTimeout(() => setShowTotal(true), 600);
+      const t = setTimeout(() => setShowTotal(true), timings.totalDelay);
       return () => clearTimeout(t);
     } else {
-      // Move to next participant or leaderboard
       const t = setTimeout(() => {
         if (currentParticipantIdx < revealOrder.length - 1) {
           setCurrentParticipantIdx((i) => i + 1);
@@ -112,27 +113,135 @@ export default function ResultsReveal() {
         } else {
           setPhase("leaderboard");
         }
-      }, 1800);
+      }, timings.nextDelay);
       return () => clearTimeout(t);
     }
-  }, [phase, currentParticipantIdx, revealedJudgeCount, showTotal, revealOrder.length]);
+  }, [mode, phase, currentParticipantIdx, revealedJudgeCount, showTotal, revealOrder.length, timings]);
+
+  // Loading → participant-reveal
+  useEffect(() => {
+    if (phase === "loading") {
+      const t = setTimeout(() => setPhase("participant-reveal"), 2500);
+      return () => clearTimeout(t);
+    }
+  }, [phase]);
 
   // Confetti for winner
   useEffect(() => {
     if (phase === "leaderboard" && results.length > 0 && !confettiFired.current) {
       confettiFired.current = true;
       setTimeout(() => {
-        confetti({
-          particleCount: 150,
-          spread: 80,
-          origin: { y: 0.6 },
-          colors: ["#d4a017", "#c0c0c0", "#cd7f32", "#ffffff"],
-        });
+        confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ["#d4a017", "#c0c0c0", "#cd7f32", "#ffffff"] });
       }, 400);
     }
   }, [phase, results.length]);
 
+  // Manual controls
+  const manualNext = useCallback(() => {
+    if (phase !== "participant-reveal") return;
+    const currentResult = revealOrder[currentParticipantIdx];
+    if (!currentResult) { setPhase("leaderboard"); return; }
+
+    const judgeCount = currentResult.judgeBreakdown.length;
+
+    if (revealedJudgeCount < judgeCount) {
+      setRevealedJudgeCount((c) => c + 1);
+    } else if (!showTotal) {
+      setShowTotal(true);
+    } else {
+      if (currentParticipantIdx < revealOrder.length - 1) {
+        setCurrentParticipantIdx((i) => i + 1);
+        setRevealedJudgeCount(0);
+        setShowTotal(false);
+      } else {
+        setPhase("leaderboard");
+      }
+    }
+  }, [phase, currentParticipantIdx, revealedJudgeCount, showTotal, revealOrder]);
+
+  const manualBack = useCallback(() => {
+    if (phase !== "participant-reveal") return;
+
+    if (showTotal) {
+      setShowTotal(false);
+    } else if (revealedJudgeCount > 0) {
+      setRevealedJudgeCount((c) => c - 1);
+    } else if (currentParticipantIdx > 0) {
+      setCurrentParticipantIdx((i) => i - 1);
+      const prevResult = revealOrder[currentParticipantIdx - 1];
+      setRevealedJudgeCount(prevResult?.judgeBreakdown.length || 0);
+      setShowTotal(true);
+    }
+  }, [phase, currentParticipantIdx, revealedJudgeCount, showTotal, revealOrder]);
+
+  const startPresentation = () => {
+    setCurrentParticipantIdx(0);
+    setRevealedJudgeCount(0);
+    setShowTotal(false);
+    confettiFired.current = false;
+    setPhase("loading");
+  };
+
   if (!event) return <p className="p-8 text-muted-foreground">Event not found.</p>;
+
+  /* ── Setup Phase ── */
+  if (phase === "setup") {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-primary text-primary-foreground p-8">
+        <Trophy className="w-16 h-16 text-accent mb-6" />
+        <h1 className="text-3xl font-bold mb-2">{event.name}</h1>
+        <p className="text-primary-foreground/60 mb-10">Results Presentation</p>
+
+        <Card className="w-full max-w-sm bg-primary-foreground/10 border-primary-foreground/20">
+          <CardContent className="p-6 space-y-5">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-primary-foreground/80">Mode</label>
+              <div className="flex gap-2">
+                <Button
+                  variant={mode === "auto" ? "secondary" : "outline"}
+                  onClick={() => setMode("auto")}
+                  className={`flex-1 ${mode === "auto" ? "" : "border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10"}`}
+                >
+                  <Play className="w-4 h-4 mr-2" /> Auto
+                </Button>
+                <Button
+                  variant={mode === "manual" ? "secondary" : "outline"}
+                  onClick={() => setMode("manual")}
+                  className={`flex-1 ${mode === "manual" ? "" : "border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10"}`}
+                >
+                  <SkipForward className="w-4 h-4 mr-2" /> Manual
+                </Button>
+              </div>
+            </div>
+
+            {mode === "auto" && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-primary-foreground/80">Speed</label>
+                <Select value={speed} onValueChange={(v) => setSpeed(v as Speed)}>
+                  <SelectTrigger className="border-primary-foreground/30 text-primary-foreground bg-transparent">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="slow">Slow</SelectItem>
+                    <SelectItem value="normal">Normal</SelectItem>
+                    <SelectItem value="fast">Fast</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <Button onClick={startPresentation} className="w-full bg-accent text-accent-foreground hover:bg-accent/90 active:scale-[0.97] mt-2">
+              Start Presentation
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Button variant="ghost" onClick={() => navigate(-1)} className="mt-6 text-primary-foreground/50 hover:text-primary-foreground">
+          <ArrowLeft className="w-4 h-4 mr-2" /> Back
+        </Button>
+      </div>
+    );
+  }
 
   /* ── Loading Phase ── */
   if (phase === "loading") {
@@ -165,10 +274,8 @@ export default function ResultsReveal() {
     const judgeScores = participant.judgeBreakdown;
 
     return (
-      <div className="min-h-screen bg-primary text-primary-foreground flex flex-col items-center justify-center p-8">
-        <p className="text-sm text-primary-foreground/40 mb-2">
-          {event.name}
-        </p>
+      <div className="min-h-screen bg-primary text-primary-foreground flex flex-col items-center justify-center p-8 relative">
+        <p className="text-sm text-primary-foreground/40 mb-2">{event.name}</p>
 
         <AnimatePresence mode="wait">
           <motion.div
@@ -180,35 +287,63 @@ export default function ResultsReveal() {
             className="text-center"
           >
             {/* Rank badge */}
-            <motion.p
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-sm font-medium text-primary-foreground/50 mb-1"
+            <motion.div
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="mb-2"
             >
-              #{rank}
-            </motion.p>
+              <span className="inline-block px-4 py-1 rounded-full bg-accent/20 text-accent text-sm font-bold">
+                #{rank}
+              </span>
+            </motion.div>
 
             {/* Participant name */}
-            <h3 className="text-3xl font-bold mb-8">{participant.participantName}</h3>
+            <motion.h3
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="text-4xl font-bold mb-10"
+            >
+              {participant.participantName}
+            </motion.h3>
 
-            {/* Judge scores appearing one by one */}
-            <div className="flex flex-wrap items-center justify-center gap-3 mb-8 min-h-[56px]">
+            {/* Judge scores appearing one by one with boom effect */}
+            <div className="flex flex-wrap items-center justify-center gap-6 mb-10 min-h-[80px]">
               <AnimatePresence>
-                {judgeScores.slice(0, revealedJudgeCount).map((jb, idx) => (
+                {judgeScores.slice(0, revealedJudgeCount).map((jb) => (
                   <motion.div
                     key={jb.judgeId}
-                    initial={{ opacity: 0, scale: 0.3, y: 20 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    initial={{ opacity: 0, scale: 0, rotate: -15 }}
+                    animate={{
+                      opacity: 1,
+                      scale: [0, 1.4, 1],
+                      rotate: [−15, 5, 0],
+                    }}
                     transition={{
-                      duration: 0.4,
+                      duration: 0.6,
                       ease: [0.16, 1, 0.3, 1],
+                      scale: { times: [0, 0.5, 1] },
+                      rotate: { times: [0, 0.5, 1] },
                     }}
                     className="flex flex-col items-center"
                   >
-                    <span className="text-3xl font-bold text-accent tabular-nums">
-                      {jb.total}
-                    </span>
-                    <span className="text-[10px] text-primary-foreground/40 mt-1 max-w-[60px] truncate">
+                    <motion.div
+                      className="relative"
+                      animate={{ scale: [1, 1.05, 1] }}
+                      transition={{ duration: 0.8, delay: 0.3 }}
+                    >
+                      {/* Boom ring effect */}
+                      <motion.div
+                        className="absolute inset-0 rounded-full border-2 border-accent"
+                        initial={{ scale: 0.8, opacity: 1 }}
+                        animate={{ scale: 2.5, opacity: 0 }}
+                        transition={{ duration: 0.8, ease: "easeOut" }}
+                      />
+                      <span className="text-4xl font-bold text-accent tabular-nums relative z-10">
+                        {jb.total}
+                      </span>
+                    </motion.div>
+                    <span className="text-xs text-primary-foreground/50 mt-2 max-w-[80px] truncate">
                       {jb.judgeName}
                     </span>
                   </motion.div>
@@ -220,20 +355,36 @@ export default function ResultsReveal() {
             <AnimatePresence>
               {showTotal && (
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.5, y: 20 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                  initial={{ opacity: 0, scale: 0.3, y: 30 }}
+                  animate={{
+                    opacity: 1,
+                    scale: [0.3, 1.2, 1],
+                    y: [30, -5, 0],
+                  }}
+                  transition={{
+                    duration: 0.7,
+                    ease: [0.16, 1, 0.3, 1],
+                    scale: { times: [0, 0.6, 1] },
+                  }}
                   className="flex flex-col items-center"
                 >
-                  <div className="w-16 h-px bg-primary-foreground/20 mb-4" />
+                  <div className="w-24 h-px bg-primary-foreground/20 mb-4" />
                   <p className="text-xs text-primary-foreground/40 uppercase tracking-widest mb-1">
                     Total
                   </p>
-                  <div className="text-6xl font-bold text-accent">
-                    <CountUp end={participant.totalScore} duration={0.8} />
-                  </div>
+                  <motion.div
+                    className="text-7xl font-bold text-accent relative"
+                    animate={{ scale: [1, 1.03, 1] }}
+                    transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 0.5 }}
+                  >
+                    {/* Glow behind total */}
+                    <div className="absolute inset-0 blur-xl bg-accent/20 rounded-full" />
+                    <span className="relative z-10">
+                      <CountUp end={participant.totalScore} duration={0.8} />
+                    </span>
+                  </motion.div>
                   {participant.maxPossible > 0 && (
-                    <p className="text-xs text-primary-foreground/30 mt-1">
+                    <p className="text-xs text-primary-foreground/30 mt-2">
                       / {participant.maxPossible}
                     </p>
                   )}
@@ -243,15 +394,33 @@ export default function ResultsReveal() {
           </motion.div>
         </AnimatePresence>
 
+        {/* Manual controls */}
+        {mode === "manual" && (
+          <div className="absolute bottom-20 flex items-center gap-4">
+            <Button
+              variant="outline"
+              onClick={manualBack}
+              disabled={currentParticipantIdx === 0 && revealedJudgeCount === 0 && !showTotal}
+              className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" /> Back
+            </Button>
+            <Button
+              onClick={manualNext}
+              className="bg-accent text-accent-foreground hover:bg-accent/90 active:scale-[0.97]"
+            >
+              Next <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+          </div>
+        )}
+
         {/* Progress dots */}
         <div className="absolute bottom-8 flex gap-2">
           {revealOrder.map((_, i) => (
             <div
               key={i}
               className={`w-2 h-2 rounded-full transition-colors duration-300 ${
-                i <= currentParticipantIdx
-                  ? "bg-accent"
-                  : "bg-primary-foreground/20"
+                i <= currentParticipantIdx ? "bg-accent" : "bg-primary-foreground/20"
               }`}
             />
           ))}

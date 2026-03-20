@@ -1,3 +1,9 @@
+export interface Participant {
+  id: string;
+  name: string;
+  email?: string;
+}
+
 export interface AppEvent {
   id: string;
   name: string;
@@ -5,15 +11,11 @@ export interface AppEvent {
   startDate: string;
   endDate: string;
   criteria: Criterion[];
-  participantIds: string[];
+  participants: Participant[];
   judgeIds: string[];
   resultsRevealed: boolean;
-}
-
-export interface Participant {
-  id: string;
-  name: string;
-  email?: string;
+  /** @deprecated use participants array instead */
+  participantIds?: string[];
 }
 
 export interface Judge {
@@ -41,7 +43,6 @@ export interface Score {
 
 export interface AppData {
   events: AppEvent[];
-  participants: Participant[];
   judges: Judge[];
   scores: Score[];
 }

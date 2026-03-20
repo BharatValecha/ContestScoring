@@ -4,7 +4,6 @@ const STORAGE_KEY = "contest-scoring-data";
 
 const defaultData: AppData = {
   events: [],
-  participants: [],
   judges: [],
   scores: [],
 };
@@ -12,7 +11,21 @@ const defaultData: AppData = {
 function load(): AppData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : { ...defaultData };
+    if (!raw) return { ...defaultData };
+    const data = JSON.parse(raw) as AppData;
+    // Migration: convert old participantIds to participants array
+    data.events = data.events.map((e: any) => {
+      if (!e.participants && e.participantIds) {
+        // Old format had global participants; migrate by creating inline entries
+        const oldParticipants = (data as any).participants || [];
+        e.participants = (e.participantIds as string[])
+          .map((pid: string) => oldParticipants.find((p: any) => p.id === pid))
+          .filter(Boolean);
+      }
+      if (!e.participants) e.participants = [];
+      return e;
+    });
+    return data;
   } catch {
     return { ...defaultData };
   }
@@ -35,13 +48,13 @@ export function getEvent(id: string): AppEvent | undefined {
   return load().events.find((e) => e.id === id);
 }
 
-export function createEvent(event: Omit<AppEvent, "id" | "resultsRevealed" | "criteria" | "participantIds" | "judgeIds">): AppEvent {
+export function createEvent(event: Omit<AppEvent, "id" | "resultsRevealed" | "criteria" | "participants" | "judgeIds">): AppEvent {
   const data = load();
   const newEvent: AppEvent = {
     ...event,
     id: genId(),
     criteria: [],
-    participantIds: [],
+    participants: [],
     judgeIds: [],
     resultsRevealed: false,
   };
@@ -63,37 +76,6 @@ export function deleteEvent(id: string) {
   const data = load();
   data.events = data.events.filter((e) => e.id !== id);
   data.scores = data.scores.filter((s) => s.eventId !== id);
-  save(data);
-}
-
-// Participants
-export function getParticipants(): Participant[] {
-  return load().participants;
-}
-
-export function createParticipant(p: Omit<Participant, "id">): Participant {
-  const data = load();
-  const newP: Participant = { ...p, id: genId() };
-  data.participants.push(newP);
-  save(data);
-  return newP;
-}
-
-export function updateParticipant(id: string, updates: Partial<Participant>) {
-  const data = load();
-  const idx = data.participants.findIndex((p) => p.id === id);
-  if (idx === -1) return;
-  data.participants[idx] = { ...data.participants[idx], ...updates };
-  save(data);
-}
-
-export function deleteParticipant(id: string) {
-  const data = load();
-  data.participants = data.participants.filter((p) => p.id !== id);
-  data.events.forEach((e) => {
-    e.participantIds = e.participantIds.filter((pid) => pid !== id);
-  });
-  data.scores = data.scores.filter((s) => s.participantId !== id);
   save(data);
 }
 
@@ -177,23 +159,7 @@ export function submitScore(score: Omit<Score, "id" | "submittedAt">): Score {
   return newScore;
 }
 
-// Event participant/judge assignment
-export function assignParticipantToEvent(eventId: string, participantId: string) {
-  const data = load();
-  const event = data.events.find((e) => e.id === eventId);
-  if (!event || event.participantIds.includes(participantId)) return;
-  event.participantIds.push(participantId);
-  save(data);
-}
-
-export function removeParticipantFromEvent(eventId: string, participantId: string) {
-  const data = load();
-  const event = data.events.find((e) => e.id === eventId);
-  if (!event) return;
-  event.participantIds = event.participantIds.filter((id) => id !== participantId);
-  save(data);
-}
-
+// Event judge assignment
 export function assignJudgeToEvent(eventId: string, judgeId: string) {
   const data = load();
   const event = data.events.find((e) => e.id === eventId);
@@ -234,11 +200,9 @@ export function calculateResults(eventId: string): ParticipantResult[] {
   const maxPerJudge = event.criteria.reduce((sum, c) => sum + c.maxScore, 0);
   const maxPossible = maxPerJudge * event.judgeIds.length;
 
-  return event.participantIds
-    .map((pid) => {
-      const participant = data.participants.find((p) => p.id === pid);
-      if (!participant) return null;
-
+  return (event.participants || [])
+    .map((participant) => {
+      const pid = participant.id;
       const pScores = eventScores.filter((s) => s.participantId === pid);
       const judgeBreakdown = pScores.map((s) => {
         const judge = data.judges.find((j) => j.id === s.judgeId);
@@ -267,6 +231,5 @@ export function calculateResults(eventId: string): ParticipantResult[] {
         categoryTotals,
       };
     })
-    .filter(Boolean)
-    .sort((a, b) => b!.totalScore - a!.totalScore) as ParticipantResult[];
+    .sort((a, b) => b.totalScore - a.totalScore);
 }
