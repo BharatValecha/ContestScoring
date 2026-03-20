@@ -71,6 +71,7 @@ export default function ResultsReveal() {
 
   // Leaderboard state
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [revealedLeaderboardCount, setRevealedLeaderboardCount] = useState(0);
   const confettiFired = useRef(false);
 
   useEffect(() => {
@@ -133,16 +134,27 @@ export default function ResultsReveal() {
     }
   }, [phase]);
 
-  // Confetti for winner
+  // Leaderboard sequential reveal (last place → first place)
+  const leaderboardRevealOrder = [...results].reverse(); // last place first
   useEffect(() => {
-    if (phase === "leaderboard" && results.length > 0 && !confettiFired.current) {
+    if (phase !== "leaderboard" || results.length === 0) return;
+    if (revealedLeaderboardCount >= results.length) return;
+    const t = setTimeout(() => {
+      setRevealedLeaderboardCount((c) => c + 1);
+    }, 800);
+    return () => clearTimeout(t);
+  }, [phase, revealedLeaderboardCount, results.length]);
+
+  // Confetti when all revealed
+  useEffect(() => {
+    if (phase === "leaderboard" && revealedLeaderboardCount >= results.length && results.length > 0 && !confettiFired.current) {
       confettiFired.current = true;
       setTimeout(() => {
         playVictoryFanfare();
         confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ["#d4a017", "#c0c0c0", "#cd7f32", "#ffffff"] });
       }, 400);
     }
-  }, [phase, results.length]);
+  }, [phase, revealedLeaderboardCount, results.length]);
 
   // Manual controls
   const manualNext = useCallback(() => {
@@ -187,6 +199,7 @@ export default function ResultsReveal() {
   const startPresentation = () => {
     setCurrentParticipantIdx(0);
     setRevealedJudgeCount(0);
+    setRevealedLeaderboardCount(0);
     setShowTotal(false);
     confettiFired.current = false;
     setPhase("loading");
@@ -454,92 +467,97 @@ export default function ResultsReveal() {
         </div>
 
         <div className="space-y-3">
-          {results.map((r, i) => (
-            <motion.div
-              key={r.participantId}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <Card className={`transition-all ${i < 3 ? rankStyles[i] : "shadow-sm"}`}>
-                <CardContent className="p-5">
-                  <div
-                    className="flex items-center justify-between cursor-pointer"
-                    onClick={() =>
-                      setExpanded({ ...expanded, [r.participantId]: !expanded[r.participantId] })
-                    }
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-8 h-8 flex items-center justify-center">
-                        {i < 3 ? (
-                          rankIcons[i]
-                        ) : (
-                          <span className="text-sm font-bold text-muted-foreground tabular-nums">
-                            #{i + 1}
-                          </span>
-                        )}
-                      </div>
-                      <div>
-                        <p className="font-semibold">{r.participantName}</p>
-                        {i < 3 && (
-                          <p className="text-xs text-muted-foreground">
-                            {i === 0 ? "🥇 Gold" : i === 1 ? "🥈 Silver" : "🥉 Bronze"}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl font-bold tabular-nums">
-                        <CountUp end={r.totalScore} duration={1 + i * 0.2} />
-                      </span>
-                      {r.maxPossible > 0 && (
-                        <span className="text-xs text-muted-foreground">/ {r.maxPossible}</span>
-                      )}
-                      {expanded[r.participantId] ? (
-                        <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                      )}
-                    </div>
-                  </div>
-
-                  <AnimatePresence>
-                    {expanded[r.participantId] && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.3 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="mt-4 pt-4 border-t space-y-3">
-                          {r.judgeBreakdown.map((jb) => (
-                            <div key={jb.judgeId} className="flex items-center justify-between text-sm">
-                              <span className="text-muted-foreground">{jb.judgeName}</span>
-                              <span className="font-medium tabular-nums">{jb.total}</span>
-                            </div>
-                          ))}
-                          {event.criteria.length > 0 && (
-                            <div className="mt-3 pt-3 border-t">
-                              <p className="text-xs text-muted-foreground mb-2 font-medium">
-                                Category Breakdown
-                              </p>
-                              {event.criteria.map((c) => (
-                                <div key={c.id} className="flex items-center justify-between text-sm">
-                                  <span className="text-muted-foreground">{c.name}</span>
-                                  <span className="tabular-nums">{r.categoryTotals[c.id] || 0}</span>
-                                </div>
-                              ))}
-                            </div>
+          {leaderboardRevealOrder.slice(0, revealedLeaderboardCount).map((r, revealIdx) => {
+            const actualRank = results.indexOf(r);
+            const isTop3 = actualRank < 3;
+            return (
+              <motion.div
+                key={r.participantId}
+                initial={{ opacity: 0, x: -60, scale: 0.85, filter: "blur(8px)" }}
+                animate={{ opacity: 1, x: 0, scale: 1, filter: "blur(0px)" }}
+                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                layout
+              >
+                <Card className={`transition-all ${isTop3 ? rankStyles[actualRank] : "shadow-sm"}`}>
+                  <CardContent className="p-5">
+                    <div
+                      className="flex items-center justify-between cursor-pointer"
+                      onClick={() =>
+                        setExpanded({ ...expanded, [r.participantId]: !expanded[r.participantId] })
+                      }
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-8 h-8 flex items-center justify-center">
+                          {isTop3 ? (
+                            rankIcons[actualRank]
+                          ) : (
+                            <span className="text-sm font-bold text-muted-foreground tabular-nums">
+                              #{actualRank + 1}
+                            </span>
                           )}
                         </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
+                        <div>
+                          <p className="font-semibold">{r.participantName}</p>
+                          {isTop3 && (
+                            <p className="text-xs text-muted-foreground">
+                              {actualRank === 0 ? "🥇 Gold" : actualRank === 1 ? "🥈 Silver" : "🥉 Bronze"}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl font-bold tabular-nums">
+                          <CountUp end={r.totalScore} duration={0.8} />
+                        </span>
+                        {r.maxPossible > 0 && (
+                          <span className="text-xs text-muted-foreground">/ {r.maxPossible}</span>
+                        )}
+                        {expanded[r.participantId] ? (
+                          <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                        )}
+                      </div>
+                    </div>
+
+                    <AnimatePresence>
+                      {expanded[r.participantId] && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.3 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-4 pt-4 border-t space-y-3">
+                            {r.judgeBreakdown.map((jb) => (
+                              <div key={jb.judgeId} className="flex items-center justify-between text-sm">
+                                <span className="text-muted-foreground">{jb.judgeName}</span>
+                                <span className="font-medium tabular-nums">{jb.total}</span>
+                              </div>
+                            ))}
+                            {event.criteria.length > 0 && (
+                              <div className="mt-3 pt-3 border-t">
+                                <p className="text-xs text-muted-foreground mb-2 font-medium">
+                                  Category Breakdown
+                                </p>
+                                {event.criteria.map((c) => (
+                                  <div key={c.id} className="flex items-center justify-between text-sm">
+                                    <span className="text-muted-foreground">{c.name}</span>
+                                    <span className="tabular-nums">{r.categoryTotals[c.id] || 0}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })}
         </div>
 
         {results.length === 0 && (
