@@ -135,7 +135,7 @@ export default function ResultsReveal() {
   }, [phase]);
 
   // Leaderboard sequential reveal (last place → first place)
-  const leaderboardRevealOrder = [...results].reverse(); // last place first
+  // Leaderboard sequential reveal (last place first, filling bottom-up)
   useEffect(() => {
     if (phase !== "leaderboard" || results.length === 0) return;
     if (revealedLeaderboardCount >= results.length) return;
