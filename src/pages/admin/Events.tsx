@@ -49,6 +49,14 @@ export default function EventsPage() {
               <Plus className="w-4 h-4 mr-2" /> New Event
             </Button>
           </DialogTrigger>
+          <Button
+            variant="outline"
+            onClick={() => { seedSampleEvent(); setEvents(getEvents()); }}
+            className="active:scale-[0.97] transition-all"
+          >
+            <Sparkles className="w-4 h-4 mr-2" /> Sample Event
+          </Button>
+          </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create Event</DialogTitle>
