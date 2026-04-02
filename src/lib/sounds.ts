@@ -112,3 +112,46 @@ export function playVictoryFanfare() {
     });
   });
 }
+
+/** Swoosh sound — quick frequency sweep for rank shifts */
+export function playSwoosh() {
+  const ctx = getCtx();
+  const now = ctx.currentTime;
+
+  // White noise swoosh
+  const bufSize = ctx.sampleRate * 0.25;
+  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1);
+
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(3000, now);
+  filter.frequency.exponentialRampToValueAtTime(300, now + 0.2);
+  filter.Q.value = 0.8;
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.18, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+  src.connect(filter).connect(gain).connect(ctx.destination);
+  src.start(now);
+  src.stop(now + 0.25);
+
+  // Subtle tonal swoosh
+  const osc = ctx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(800, now);
+  osc.frequency.exponentialRampToValueAtTime(200, now + 0.18);
+
+  const oGain = ctx.createGain();
+  oGain.gain.setValueAtTime(0.08, now);
+  oGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+  osc.connect(oGain).connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.25);
+}

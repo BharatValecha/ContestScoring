@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { playDrumroll, playFanfare, playVictoryFanfare } from "@/lib/sounds";
+import { playDrumroll, playFanfare, playVictoryFanfare, playSwoosh } from "@/lib/sounds";
 import { useParams, useNavigate } from "react-router-dom";
 import { getEvent, calculateResults, getJudges } from "@/lib/store";
 import { ParticipantResult } from "@/lib/store";
@@ -175,6 +175,11 @@ export default function ResultsReveal() {
     setLeaderboard((prev) => {
       const updated = [...prev, participant];
       updated.sort((a, b) => b.totalScore - a.totalScore);
+      // Play swoosh if the new entry pushes others down (i.e. not last place)
+      const newIdx = updated.findIndex((p) => p.participantId === participant.participantId);
+      if (newIdx < updated.length - 1) {
+        setTimeout(() => playSwoosh(), 200);
+      }
       return updated;
     });
     setJustInsertedId(participant.participantId);
