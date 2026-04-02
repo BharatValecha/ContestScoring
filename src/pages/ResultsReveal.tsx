@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { playDrumroll, playFanfare, playVictoryFanfare } from "@/lib/sounds";
+import { playDrumroll, playFanfare, playVictoryFanfare, playSwoosh } from "@/lib/sounds";
 import { useParams, useNavigate } from "react-router-dom";
 import { getEvent, calculateResults, getJudges } from "@/lib/store";
 import { ParticipantResult } from "@/lib/store";
