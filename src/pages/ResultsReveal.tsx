@@ -31,18 +31,96 @@ function CountUp({ end, duration = 1.2 }: { end: number; duration?: number }) {
   return <span className="tabular-nums">{val.toFixed(val % 1 === 0 ? 0 : 1)}</span>;
 }
 
+/* ── Drumroll countdown dots ── */
+function DrumrollCountdown({ onComplete }: { onComplete: () => void }) {
+  const [count, setCount] = useState(3);
+  const hasCompleted = useRef(false);
+
+  useEffect(() => {
+    hasCompleted.current = false;
+    playDrumroll();
+  }, []);
+
+  useEffect(() => {
+    if (count > 0) {
+      const t = setTimeout(() => setCount((c) => c - 1), 600);
+      return () => clearTimeout(t);
+    } else if (!hasCompleted.current) {
+      hasCompleted.current = true;
+      const t = setTimeout(onComplete, 300);
+      return () => clearTimeout(t);
+    }
+  }, [count, onComplete]);
+
+  return (
+    <motion.div
+      className="flex flex-col items-center"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      {/* Pulsing ring */}
+      <motion.div
+        className="w-32 h-32 rounded-full border-4 border-accent/40 flex items-center justify-center relative"
+        animate={{ scale: [1, 1.08, 1], borderColor: ["hsl(var(--accent) / 0.4)", "hsl(var(--accent) / 0.8)", "hsl(var(--accent) / 0.4)"] }}
+        transition={{ duration: 0.6, repeat: Infinity }}
+      >
+        {/* Expanding ring */}
+        <motion.div
+          className="absolute inset-0 rounded-full border-2 border-accent"
+          animate={{ scale: [1, 2], opacity: [0.6, 0] }}
+          transition={{ duration: 1.2, repeat: Infinity }}
+        />
+        <AnimatePresence mode="wait">
+          {count > 0 ? (
+            <motion.span
+              key={count}
+              initial={{ scale: 2, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.5, opacity: 0 }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              className="text-5xl font-bold text-accent tabular-nums"
+            >
+              {count}
+            </motion.span>
+          ) : (
+            <motion.span
+              key="go"
+              initial={{ scale: 3, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.5, opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="text-2xl font-black text-accent uppercase tracking-widest"
+            >
+              ★
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </motion.div>
+      <motion.p
+        className="mt-4 text-sm text-primary-foreground/40 uppercase tracking-[0.3em]"
+        animate={{ opacity: [0.3, 1, 0.3] }}
+        transition={{ duration: 1, repeat: Infinity }}
+      >
+        Drumroll…
+      </motion.p>
+    </motion.div>
+  );
+}
+
 /* ── Types ── */
 type Phase = "setup" | "loading" | "scoring";
 type PresentationMode = "auto" | "manual";
 type Speed = "slow" | "normal" | "fast";
 
-// Sub-phases within scoring for each participant
-type ScoringStep = "judge-reveal" | "total-reveal" | "leaderboard-insert" | "done";
+// The scoring view alternates between these sub-views
+type ScoringView = "participant" | "drumroll" | "total" | "leaderboard" | "final";
+type ScoringStep = "judge-reveal" | "drumroll" | "total-reveal" | "leaderboard-show" | "done";
 
-const speedTimings: Record<Speed, { judgeDelay: number; totalDelay: number; insertDelay: number; nextDelay: number }> = {
-  slow: { judgeDelay: 1500, totalDelay: 1000, insertDelay: 1500, nextDelay: 2500 },
-  normal: { judgeDelay: 900, totalDelay: 600, insertDelay: 1000, nextDelay: 1500 },
-  fast: { judgeDelay: 500, totalDelay: 300, insertDelay: 600, nextDelay: 800 },
+const speedTimings: Record<Speed, { judgeDelay: number; drumrollDuration: number; totalDelay: number; leaderboardDuration: number; nextDelay: number }> = {
+  slow: { judgeDelay: 1500, drumrollDuration: 2400, totalDelay: 2000, leaderboardDuration: 3000, nextDelay: 1000 },
+  normal: { judgeDelay: 900, drumrollDuration: 2200, totalDelay: 1500, leaderboardDuration: 2000, nextDelay: 600 },
+  fast: { judgeDelay: 500, drumrollDuration: 2000, totalDelay: 800, leaderboardDuration: 1200, nextDelay: 400 },
 };
 
 const rankStyles: Record<number, string> = {
@@ -70,17 +148,15 @@ export default function ResultsReveal() {
   // Scoring state
   const [currentParticipantIdx, setCurrentParticipantIdx] = useState(0);
   const [revealedJudgeCount, setRevealedJudgeCount] = useState(0);
-  const [showTotal, setShowTotal] = useState(false);
   const [scoringStep, setScoringStep] = useState<ScoringStep>("judge-reveal");
+  const [scoringView, setScoringView] = useState<ScoringView>("participant");
 
-  // Leaderboard: participants already added to the board, sorted by score desc
+  // Leaderboard
   const [leaderboard, setLeaderboard] = useState<ParticipantResult[]>([]);
   const [justInsertedId, setJustInsertedId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [allDone, setAllDone] = useState(false);
   const confettiFired = useRef(false);
 
-  // Reveal order: last place to first (so highest scorer is revealed last)
   const revealOrder = useMemo(() => [...results].reverse(), [results]);
 
   useEffect(() => {
@@ -95,7 +171,6 @@ export default function ResultsReveal() {
 
   const timings = speedTimings[speed];
 
-  // Insert current participant into leaderboard (sorted by score desc)
   const insertIntoLeaderboard = useCallback((participant: ParticipantResult) => {
     setLeaderboard((prev) => {
       const updated = [...prev, participant];
@@ -103,14 +178,12 @@ export default function ResultsReveal() {
       return updated;
     });
     setJustInsertedId(participant.participantId);
-    // Clear highlight after a bit
     setTimeout(() => setJustInsertedId(null), 1500);
   }, []);
 
-  // Auto mode sequencing
+  // Auto sequencing
   useEffect(() => {
     if (mode !== "auto" || phase !== "scoring") return;
-
     const currentResult = revealOrder[currentParticipantIdx];
     if (!currentResult) return;
 
@@ -118,45 +191,47 @@ export default function ResultsReveal() {
       const judgeCount = currentResult.judgeBreakdown.length;
       if (revealedJudgeCount < judgeCount) {
         const t = setTimeout(() => {
-          playDrumroll();
           setRevealedJudgeCount((c) => c + 1);
         }, timings.judgeDelay);
         return () => clearTimeout(t);
       } else {
-        // All judges revealed, show total
+        // All judges done → drumroll
         const t = setTimeout(() => {
-          playFanfare();
-          setShowTotal(true);
-          setScoringStep("total-reveal");
-        }, timings.totalDelay);
+          setScoringStep("drumroll");
+          setScoringView("drumroll");
+        }, 400);
         return () => clearTimeout(t);
       }
     }
 
+    // Drumroll is handled by the DrumrollCountdown component's onComplete callback
+    // which triggers the total reveal
+
     if (scoringStep === "total-reveal") {
+      // After showing total, insert into leaderboard and show it
       const t = setTimeout(() => {
         insertIntoLeaderboard(currentResult);
-        setScoringStep("leaderboard-insert");
-      }, timings.insertDelay);
+        setScoringStep("leaderboard-show");
+        setScoringView("leaderboard");
+      }, timings.totalDelay);
       return () => clearTimeout(t);
     }
 
-    if (scoringStep === "leaderboard-insert") {
+    if (scoringStep === "leaderboard-show") {
       const t = setTimeout(() => {
-        // Move to next participant or finish
         if (currentParticipantIdx < revealOrder.length - 1) {
           setCurrentParticipantIdx((i) => i + 1);
           setRevealedJudgeCount(0);
-          setShowTotal(false);
           setScoringStep("judge-reveal");
+          setScoringView("participant");
         } else {
           setScoringStep("done");
-          setAllDone(true);
+          setScoringView("final");
         }
-      }, timings.nextDelay);
+      }, timings.leaderboardDuration);
       return () => clearTimeout(t);
     }
-  }, [mode, phase, currentParticipantIdx, revealedJudgeCount, showTotal, scoringStep, revealOrder, timings, insertIntoLeaderboard]);
+  }, [mode, phase, currentParticipantIdx, revealedJudgeCount, scoringStep, revealOrder, timings, insertIntoLeaderboard]);
 
   // Loading → scoring
   useEffect(() => {
@@ -166,16 +241,23 @@ export default function ResultsReveal() {
     }
   }, [phase]);
 
-  // Confetti when all done
+  // Confetti on final
   useEffect(() => {
-    if (allDone && !confettiFired.current) {
+    if (scoringView === "final" && !confettiFired.current && leaderboard.length > 0) {
       confettiFired.current = true;
       setTimeout(() => {
         playVictoryFanfare();
         confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ["#d4a017", "#c0c0c0", "#cd7f32", "#ffffff"] });
       }, 600);
     }
-  }, [allDone]);
+  }, [scoringView, leaderboard.length]);
+
+  // Drumroll complete handler
+  const handleDrumrollComplete = useCallback(() => {
+    playFanfare();
+    setScoringStep("total-reveal");
+    setScoringView("total");
+  }, []);
 
   // Manual controls
   const manualNext = useCallback(() => {
@@ -186,25 +268,29 @@ export default function ResultsReveal() {
     if (scoringStep === "judge-reveal") {
       const judgeCount = currentResult.judgeBreakdown.length;
       if (revealedJudgeCount < judgeCount) {
-        playDrumroll();
         setRevealedJudgeCount((c) => c + 1);
       } else {
-        playFanfare();
-        setShowTotal(true);
-        setScoringStep("total-reveal");
+        setScoringStep("drumroll");
+        setScoringView("drumroll");
       }
+    } else if (scoringStep === "drumroll") {
+      // Skip drumroll
+      playFanfare();
+      setScoringStep("total-reveal");
+      setScoringView("total");
     } else if (scoringStep === "total-reveal") {
       insertIntoLeaderboard(currentResult);
-      setScoringStep("leaderboard-insert");
-    } else if (scoringStep === "leaderboard-insert") {
+      setScoringStep("leaderboard-show");
+      setScoringView("leaderboard");
+    } else if (scoringStep === "leaderboard-show") {
       if (currentParticipantIdx < revealOrder.length - 1) {
         setCurrentParticipantIdx((i) => i + 1);
         setRevealedJudgeCount(0);
-        setShowTotal(false);
         setScoringStep("judge-reveal");
+        setScoringView("participant");
       } else {
         setScoringStep("done");
-        setAllDone(true);
+        setScoringView("final");
       }
     }
   }, [phase, currentParticipantIdx, revealedJudgeCount, scoringStep, revealOrder, insertIntoLeaderboard]);
@@ -212,30 +298,31 @@ export default function ResultsReveal() {
   const manualBack = useCallback(() => {
     if (phase !== "scoring") return;
 
-    if (scoringStep === "leaderboard-insert") {
-      // Remove from leaderboard and go back to total
+    if (scoringStep === "leaderboard-show") {
       const currentResult = revealOrder[currentParticipantIdx];
       if (currentResult) {
         setLeaderboard((prev) => prev.filter((p) => p.participantId !== currentResult.participantId));
       }
       setScoringStep("total-reveal");
+      setScoringView("total");
     } else if (scoringStep === "total-reveal") {
-      setShowTotal(false);
       setScoringStep("judge-reveal");
+      setScoringView("participant");
+    } else if (scoringStep === "drumroll") {
+      setScoringStep("judge-reveal");
+      setScoringView("participant");
     } else if (scoringStep === "judge-reveal") {
       if (revealedJudgeCount > 0) {
         setRevealedJudgeCount((c) => c - 1);
       } else if (currentParticipantIdx > 0) {
-        // Go back to previous participant's leaderboard-insert state
         const prevResult = revealOrder[currentParticipantIdx - 1];
-        // Remove previous from leaderboard
         if (prevResult) {
           setLeaderboard((prev) => prev.filter((p) => p.participantId !== prevResult.participantId));
         }
         setCurrentParticipantIdx((i) => i - 1);
         setRevealedJudgeCount(prevResult?.judgeBreakdown.length || 0);
-        setShowTotal(true);
         setScoringStep("total-reveal");
+        setScoringView("total");
       }
     }
   }, [phase, currentParticipantIdx, revealedJudgeCount, scoringStep, revealOrder]);
@@ -243,11 +330,11 @@ export default function ResultsReveal() {
   const startPresentation = () => {
     setCurrentParticipantIdx(0);
     setRevealedJudgeCount(0);
-    setShowTotal(false);
     setScoringStep("judge-reveal");
+    setScoringView("participant");
     setLeaderboard([]);
     setJustInsertedId(null);
-    setAllDone(false);
+    setExpanded({});
     confettiFired.current = false;
     setPhase("loading");
   };
@@ -335,172 +422,360 @@ export default function ResultsReveal() {
     );
   }
 
-  /* ── Scoring Phase (combined participant reveal + live leaderboard) ── */
+  /* ── Scoring Phase ── */
   const currentParticipant = revealOrder[currentParticipantIdx];
-  const rank = results.length - currentParticipantIdx;
+  const participantRank = results.length - currentParticipantIdx;
 
   return (
-    <div className="min-h-screen bg-primary text-primary-foreground flex flex-col lg:flex-row">
-      {/* Left side: Current participant scoring */}
-      <div className="flex-1 flex flex-col items-center justify-center p-6 lg:p-8 relative min-h-[50vh] lg:min-h-screen">
-        <p className="text-xs text-primary-foreground/40 mb-1">{event.name}</p>
-        <p className="text-xs text-primary-foreground/30 mb-6">
-          Participant {currentParticipantIdx + 1} of {revealOrder.length}
+    <div className="min-h-screen bg-primary text-primary-foreground flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      {/* Event name */}
+      <div className="absolute top-4 left-0 right-0 text-center">
+        <p className="text-xs text-primary-foreground/30">{event.name}</p>
+        <p className="text-xs text-primary-foreground/20">
+          {currentParticipantIdx + 1} / {revealOrder.length}
         </p>
+      </div>
 
-        {!allDone && currentParticipant ? (
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentParticipant.participantId}
-              initial={{ opacity: 0, scale: 0.8, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: -40 }}
-              transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-              className="text-center w-full max-w-md"
+      <AnimatePresence mode="wait">
+        {/* ── PARTICIPANT VIEW: Judge scores one by one ── */}
+        {scoringView === "participant" && currentParticipant && (
+          <motion.div
+            key={`participant-${currentParticipant.participantId}`}
+            initial={{ opacity: 0, y: 40, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -40, scale: 0.95 }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            className="text-center w-full max-w-lg"
+          >
+            <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} className="mb-2">
+              <span className="inline-block px-4 py-1 rounded-full bg-accent/20 text-accent text-sm font-bold">
+                #{participantRank}
+              </span>
+            </motion.div>
+
+            <motion.h3
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="text-4xl lg:text-5xl font-bold mb-10"
             >
-              {/* Rank badge */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.5 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="mb-2"
-              >
-                <span className="inline-block px-4 py-1 rounded-full bg-accent/20 text-accent text-sm font-bold">
-                  #{rank}
-                </span>
-              </motion.div>
+              {currentParticipant.participantName}
+            </motion.h3>
 
-              {/* Participant name */}
-              <motion.h3
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15 }}
-                className="text-3xl lg:text-4xl font-bold mb-8"
-              >
-                {currentParticipant.participantName}
-              </motion.h3>
-
-              {/* Judge scores */}
-              <div className="flex flex-wrap items-center justify-center gap-5 mb-8 min-h-[70px]">
-                <AnimatePresence>
-                  {currentParticipant.judgeBreakdown.slice(0, revealedJudgeCount).map((jb) => (
-                    <motion.div
-                      key={jb.judgeId}
-                      initial={{ opacity: 0, scale: 0, rotate: -15 }}
-                      animate={{
-                        opacity: 1,
-                        scale: [0, 1.4, 1],
-                        rotate: [-15, 5, 0],
-                      }}
-                      transition={{
-                        duration: 0.6,
-                        ease: [0.16, 1, 0.3, 1],
-                        scale: { times: [0, 0.5, 1] },
-                        rotate: { times: [0, 0.5, 1] },
-                      }}
-                      className="flex flex-col items-center"
-                    >
-                      <motion.div className="relative">
-                        <motion.div
-                          className="absolute inset-0 rounded-full border-2 border-accent"
-                          initial={{ scale: 0.8, opacity: 1 }}
-                          animate={{ scale: 2.5, opacity: 0 }}
-                          transition={{ duration: 0.8, ease: "easeOut" }}
-                        />
-                        <span className="text-3xl font-bold text-accent tabular-nums relative z-10">
-                          {jb.total}
-                        </span>
-                      </motion.div>
-                      <span className="text-xs text-primary-foreground/50 mt-2 max-w-[80px] truncate">
-                        {jb.judgeName}
-                      </span>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-
-              {/* Total score */}
+            <div className="flex flex-wrap items-center justify-center gap-6 min-h-[80px]">
               <AnimatePresence>
-                {showTotal && (
+                {currentParticipant.judgeBreakdown.slice(0, revealedJudgeCount).map((jb) => (
                   <motion.div
-                    initial={{ opacity: 0, scale: 0.3, y: 30 }}
-                    animate={{
-                      opacity: 1,
-                      scale: [0.3, 1.2, 1],
-                      y: [30, -5, 0],
-                    }}
+                    key={jb.judgeId}
+                    initial={{ opacity: 0, scale: 0, rotate: -15 }}
+                    animate={{ opacity: 1, scale: [0, 1.4, 1], rotate: [-15, 5, 0] }}
                     transition={{
-                      duration: 0.7,
+                      duration: 0.6,
                       ease: [0.16, 1, 0.3, 1],
-                      scale: { times: [0, 0.6, 1] },
+                      scale: { times: [0, 0.5, 1] },
+                      rotate: { times: [0, 0.5, 1] },
                     }}
                     className="flex flex-col items-center"
                   >
-                    <div className="w-24 h-px bg-primary-foreground/20 mb-4" />
-                    <p className="text-xs text-primary-foreground/40 uppercase tracking-widest mb-1">
-                      Total
-                    </p>
-                    <motion.div
-                      className="text-6xl lg:text-7xl font-bold text-accent relative"
-                      animate={{ scale: [1, 1.03, 1] }}
-                      transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 0.5 }}
-                    >
-                      <div className="absolute inset-0 blur-xl bg-accent/20 rounded-full" />
-                      <span className="relative z-10">
-                        <CountUp end={currentParticipant.totalScore} duration={0.8} />
+                    <motion.div className="relative">
+                      <motion.div
+                        className="absolute inset-0 rounded-full border-2 border-accent"
+                        initial={{ scale: 0.8, opacity: 1 }}
+                        animate={{ scale: 2.5, opacity: 0 }}
+                        transition={{ duration: 0.8, ease: "easeOut" }}
+                      />
+                      <span className="text-4xl font-bold text-accent tabular-nums relative z-10">
+                        {jb.total}
                       </span>
                     </motion.div>
-                    {currentParticipant.maxPossible > 0 && (
-                      <p className="text-xs text-primary-foreground/30 mt-2">
-                        / {currentParticipant.maxPossible}
-                      </p>
-                    )}
+                    <span className="text-xs text-primary-foreground/50 mt-2 max-w-[80px] truncate">
+                      {jb.judgeName}
+                    </span>
                   </motion.div>
-                )}
+                ))}
               </AnimatePresence>
-            </motion.div>
-          </AnimatePresence>
-        ) : (
-          /* All done - final celebration */
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── DRUMROLL VIEW ── */}
+        {scoringView === "drumroll" && currentParticipant && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
+            key={`drumroll-${currentParticipant.participantId}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, scale: 1.5 }}
+            transition={{ duration: 0.3 }}
             className="text-center"
           >
+            <p className="text-lg font-semibold text-primary-foreground/60 mb-6">
+              {currentParticipant.participantName}
+            </p>
+            <DrumrollCountdown onComplete={handleDrumrollComplete} />
+          </motion.div>
+        )}
+
+        {/* ── TOTAL REVEAL VIEW ── */}
+        {scoringView === "total" && currentParticipant && (
+          <motion.div
+            key={`total-${currentParticipant.participantId}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, y: -60 }}
+            transition={{ duration: 0.4 }}
+            className="text-center"
+          >
+            <p className="text-lg font-semibold text-primary-foreground/60 mb-2">
+              {currentParticipant.participantName}
+            </p>
             <motion.div
-              animate={{ rotate: [0, -10, 10, -10, 0], scale: [1, 1.1, 1] }}
+              initial={{ scale: 0.3, opacity: 0 }}
+              animate={{ scale: [0.3, 1.25, 1], opacity: 1 }}
+              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], scale: { times: [0, 0.5, 1] } }}
+              className="flex flex-col items-center"
+            >
+              <p className="text-xs text-primary-foreground/40 uppercase tracking-widest mb-2">Total Score</p>
+              <motion.div
+                className="text-8xl lg:text-9xl font-bold text-accent relative"
+                animate={{ scale: [1, 1.03, 1] }}
+                transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 0.5 }}
+              >
+                <div className="absolute inset-0 blur-2xl bg-accent/20 rounded-full" />
+                <span className="relative z-10">
+                  <CountUp end={currentParticipant.totalScore} duration={0.8} />
+                </span>
+              </motion.div>
+              {currentParticipant.maxPossible > 0 && (
+                <p className="text-sm text-primary-foreground/30 mt-3">
+                  out of {currentParticipant.maxPossible}
+                </p>
+              )}
+            </motion.div>
+
+            {/* Judge breakdown below */}
+            <motion.div
+              className="flex flex-wrap items-center justify-center gap-4 mt-8"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              {currentParticipant.judgeBreakdown.map((jb) => (
+                <div key={jb.judgeId} className="text-center">
+                  <span className="text-lg font-bold text-primary-foreground/70 tabular-nums">{jb.total}</span>
+                  <p className="text-[10px] text-primary-foreground/30">{jb.judgeName}</p>
+                </div>
+              ))}
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* ── LEADERBOARD VIEW ── */}
+        {scoringView === "leaderboard" && (
+          <motion.div
+            key={`leaderboard-${currentParticipantIdx}`}
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -30 }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            className="w-full max-w-md"
+          >
+            <div className="flex items-center justify-center gap-2 mb-6">
+              <Trophy className="w-5 h-5 text-accent" />
+              <h3 className="text-lg font-bold text-primary-foreground/80">Current Standings</h3>
+            </div>
+
+            <LayoutGroup>
+              <div className="space-y-2">
+                {leaderboard.map((entry, idx) => {
+                  const isJustInserted = entry.participantId === justInsertedId;
+
+                  return (
+                    <motion.div
+                      key={entry.participantId}
+                      layout
+                      layoutId={`lb-${entry.participantId}`}
+                      initial={{ opacity: 0, x: 100, scale: 0.8 }}
+                      animate={{
+                        opacity: 1,
+                        x: 0,
+                        scale: isJustInserted ? [0.8, 1.06, 1] : 1,
+                      }}
+                      transition={{
+                        layout: { type: "spring", stiffness: 400, damping: 28 },
+                        opacity: { duration: 0.4 },
+                        x: { duration: 0.5, ease: [0.16, 1, 0.3, 1] },
+                        scale: { duration: 0.6, times: [0, 0.6, 1] },
+                      }}
+                    >
+                      <div
+                        className={`rounded-lg border p-3.5 transition-all duration-700 cursor-pointer ${
+                          isJustInserted
+                            ? "border-accent bg-accent/15 shadow-[0_0_24px_6px_hsl(var(--accent)/0.25)]"
+                            : "border-primary-foreground/10 bg-primary-foreground/5"
+                        }`}
+                        onClick={() =>
+                          setExpanded({ ...expanded, [entry.participantId]: !expanded[entry.participantId] })
+                        }
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <motion.div layout className="w-7 h-7 flex items-center justify-center">
+                              <motion.span
+                                layout
+                                className="text-sm font-bold text-primary-foreground/50 tabular-nums"
+                              >
+                                #{idx + 1}
+                              </motion.span>
+                            </motion.div>
+                            <span className={`font-semibold text-sm ${isJustInserted ? "text-accent" : "text-primary-foreground"}`}>
+                              {entry.participantName}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <motion.span
+                              className="text-xl font-bold text-accent tabular-nums"
+                              key={`s-${entry.participantId}-${isJustInserted}`}
+                              initial={isJustInserted ? { scale: 1.8, opacity: 0 } : false}
+                              animate={{ scale: 1, opacity: 1 }}
+                              transition={{ duration: 0.5 }}
+                            >
+                              {entry.totalScore}
+                            </motion.span>
+                            {expanded[entry.participantId] ? (
+                              <ChevronUp className="w-3 h-3 text-primary-foreground/30" />
+                            ) : (
+                              <ChevronDown className="w-3 h-3 text-primary-foreground/30" />
+                            )}
+                          </div>
+                        </div>
+
+                        <AnimatePresence>
+                          {expanded[entry.participantId] && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.3 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="mt-3 pt-3 border-t border-primary-foreground/10 space-y-1.5">
+                                {entry.judgeBreakdown.map((jb) => (
+                                  <div key={jb.judgeId} className="flex items-center justify-between text-xs">
+                                    <span className="text-primary-foreground/40">{jb.judgeName}</span>
+                                    <span className="font-medium text-primary-foreground/60 tabular-nums">{jb.total}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </LayoutGroup>
+          </motion.div>
+        )}
+
+        {/* ── FINAL VIEW ── */}
+        {scoringView === "final" && (
+          <motion.div
+            key="final"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.6 }}
+            className="w-full max-w-md text-center"
+          >
+            <motion.div
+              animate={{ rotate: [0, -10, 10, -10, 0], scale: [1, 1.15, 1] }}
               transition={{ duration: 1.5, repeat: 2 }}
             >
               <Trophy className="w-20 h-20 text-accent mx-auto mb-4" />
             </motion.div>
-            <h2 className="text-3xl font-bold mb-2">Final Results!</h2>
-            <p className="text-primary-foreground/50 text-sm">
+            <h2 className="text-3xl font-bold mb-1">Final Results!</h2>
+            <p className="text-primary-foreground/50 text-sm mb-8">
               {leaderboard[0]?.participantName} takes the crown! 🎉
             </p>
-          </motion.div>
-        )}
 
-        {/* Manual controls */}
-        {mode === "manual" && !allDone && (
-          <div className="absolute bottom-8 lg:bottom-12 flex items-center gap-4">
-            <Button
-              variant="outline"
-              onClick={manualBack}
-              disabled={currentParticipantIdx === 0 && revealedJudgeCount === 0 && !showTotal}
-              className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10"
-            >
+            {/* Final leaderboard with rank styles */}
+            <LayoutGroup>
+              <div className="space-y-2 text-left">
+                {leaderboard.map((entry, idx) => {
+                  const isTop3 = idx < 3;
+                  return (
+                    <motion.div
+                      key={entry.participantId}
+                      layout
+                      layoutId={`lb-${entry.participantId}`}
+                      transition={{ layout: { type: "spring", stiffness: 400, damping: 28 } }}
+                    >
+                      <div
+                        className={`rounded-lg border p-3.5 ${
+                          isTop3
+                            ? rankStyles[idx] || "border-primary-foreground/10 bg-primary-foreground/5"
+                            : "border-primary-foreground/10 bg-primary-foreground/5"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-7 h-7 flex items-center justify-center">
+                              {isTop3 ? rankIcons[idx] : (
+                                <span className="text-sm font-bold text-primary-foreground/50 tabular-nums">#{idx + 1}</span>
+                              )}
+                            </div>
+                            <div>
+                              <span className="font-semibold text-sm text-primary-foreground">
+                                {entry.participantName}
+                              </span>
+                              {isTop3 && (
+                                <p className="text-[10px] text-primary-foreground/40">
+                                  {idx === 0 ? "🥇 Gold" : idx === 1 ? "🥈 Silver" : "🥉 Bronze"}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-xl font-bold text-accent tabular-nums">
+                            {entry.totalScore}
+                          </span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </LayoutGroup>
+
+            <Button variant="ghost" onClick={() => navigate(-1)} className="mt-8 text-primary-foreground/50 hover:text-primary-foreground">
               <ArrowLeft className="w-4 h-4 mr-2" /> Back
             </Button>
-            <Button
-              onClick={manualNext}
-              className="bg-accent text-accent-foreground hover:bg-accent/90 active:scale-[0.97]"
-            >
-              Next <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </div>
+          </motion.div>
         )}
+      </AnimatePresence>
 
-        {/* Progress dots */}
-        <div className="absolute bottom-3 flex gap-2">
+      {/* Manual controls */}
+      {mode === "manual" && scoringView !== "final" && (
+        <div className="absolute bottom-12 flex items-center gap-4">
+          <Button
+            variant="outline"
+            onClick={manualBack}
+            disabled={currentParticipantIdx === 0 && revealedJudgeCount === 0 && scoringStep === "judge-reveal"}
+            className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" /> Back
+          </Button>
+          <Button
+            onClick={manualNext}
+            className="bg-accent text-accent-foreground hover:bg-accent/90 active:scale-[0.97]"
+          >
+            Next <ArrowRight className="w-4 h-4 ml-2" />
+          </Button>
+        </div>
+      )}
+
+      {/* Progress dots */}
+      {scoringView !== "final" && (
+        <div className="absolute bottom-4 flex gap-2">
           {revealOrder.map((_, i) => (
             <div
               key={i}
@@ -510,137 +785,6 @@ export default function ResultsReveal() {
             />
           ))}
         </div>
-      </div>
-
-      {/* Right side: Live leaderboard */}
-      <div className="w-full lg:w-[380px] bg-background/5 backdrop-blur-sm border-t lg:border-t-0 lg:border-l border-primary-foreground/10 p-4 lg:p-6 overflow-y-auto max-h-[50vh] lg:max-h-screen">
-        <div className="flex items-center gap-2 mb-4">
-          <Trophy className="w-4 h-4 text-accent" />
-          <h3 className="text-sm font-bold text-primary-foreground/70 uppercase tracking-wider">
-            Leaderboard
-          </h3>
-          <span className="text-xs text-primary-foreground/30 ml-auto">
-            {leaderboard.length}/{results.length}
-          </span>
-        </div>
-
-        {leaderboard.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-32 text-primary-foreground/20">
-            <p className="text-sm">Waiting for scores…</p>
-          </div>
-        ) : (
-          <LayoutGroup>
-            <div className="space-y-2">
-              {leaderboard.map((entry, idx) => {
-                const isJustInserted = entry.participantId === justInsertedId;
-                const isTop3 = idx < 3 && allDone;
-
-                return (
-                  <motion.div
-                    key={entry.participantId}
-                    layout
-                    layoutId={`lb-${entry.participantId}`}
-                    initial={{ opacity: 0, x: 80, scale: 0.8 }}
-                    animate={{
-                      opacity: 1,
-                      x: 0,
-                      scale: isJustInserted ? [0.8, 1.05, 1] : 1,
-                    }}
-                    transition={{
-                      layout: { type: "spring", stiffness: 350, damping: 30 },
-                      opacity: { duration: 0.4 },
-                      x: { duration: 0.5, ease: [0.16, 1, 0.3, 1] },
-                      scale: { duration: 0.6, times: [0, 0.6, 1] },
-                    }}
-                  >
-                    <div
-                      className={`rounded-lg border p-3 transition-all duration-500 cursor-pointer ${
-                        isJustInserted
-                          ? "border-accent bg-accent/10 shadow-[0_0_20px_4px_hsl(var(--accent)/0.2)]"
-                          : isTop3
-                          ? rankStyles[idx] || "border-primary-foreground/10 bg-primary-foreground/5"
-                          : "border-primary-foreground/10 bg-primary-foreground/5"
-                      }`}
-                      onClick={() =>
-                        setExpanded({ ...expanded, [entry.participantId]: !expanded[entry.participantId] })
-                      }
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-7 h-7 flex items-center justify-center">
-                            {isTop3 && allDone ? (
-                              rankIcons[idx]
-                            ) : (
-                              <motion.span
-                                layout
-                                className="text-sm font-bold text-primary-foreground/50 tabular-nums"
-                              >
-                                #{idx + 1}
-                              </motion.span>
-                            )}
-                          </div>
-                          <span className="font-semibold text-sm text-primary-foreground">
-                            {entry.participantName}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <motion.span
-                            className="text-lg font-bold text-accent tabular-nums"
-                            key={`score-${entry.participantId}-${isJustInserted}`}
-                            initial={isJustInserted ? { scale: 1.5, opacity: 0 } : false}
-                            animate={{ scale: 1, opacity: 1 }}
-                            transition={{ duration: 0.4 }}
-                          >
-                            {entry.totalScore}
-                          </motion.span>
-                          {expanded[entry.participantId] ? (
-                            <ChevronUp className="w-3 h-3 text-primary-foreground/30" />
-                          ) : (
-                            <ChevronDown className="w-3 h-3 text-primary-foreground/30" />
-                          )}
-                        </div>
-                      </div>
-
-                      <AnimatePresence>
-                        {expanded[entry.participantId] && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.3 }}
-                            className="overflow-hidden"
-                          >
-                            <div className="mt-3 pt-3 border-t border-primary-foreground/10 space-y-1.5">
-                              {entry.judgeBreakdown.map((jb) => (
-                                <div key={jb.judgeId} className="flex items-center justify-between text-xs">
-                                  <span className="text-primary-foreground/40">{jb.judgeName}</span>
-                                  <span className="font-medium text-primary-foreground/60 tabular-nums">{jb.total}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </LayoutGroup>
-        )}
-      </div>
-
-      {/* Back button */}
-      {allDone && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="fixed bottom-6 left-6"
-        >
-          <Button variant="ghost" onClick={() => navigate(-1)} className="text-primary-foreground/50 hover:text-primary-foreground">
-            <ArrowLeft className="w-4 h-4 mr-2" /> Back
-          </Button>
-        </motion.div>
       )}
     </div>
   );
