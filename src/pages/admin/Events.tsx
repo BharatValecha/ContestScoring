@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getEvents, createEvent, deleteEvent } from "@/lib/store";
+import { seedSampleEvent } from "@/lib/seedData";
 import { AppEvent } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Trash2, ArrowRight, CalendarDays } from "lucide-react";
+import { Plus, Trash2, ArrowRight, CalendarDays, Sparkles } from "lucide-react";
 
 export default function EventsPage() {
   const [events, setEvents] = useState<AppEvent[]>(getEvents);
@@ -42,12 +43,20 @@ export default function EventsPage() {
           <h1 className="text-2xl font-bold">Events</h1>
           <p className="text-muted-foreground text-sm mt-1">Create and manage competition events</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-primary text-primary-foreground active:scale-[0.97] transition-all">
-              <Plus className="w-4 h-4 mr-2" /> New Event
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => { seedSampleEvent(); setEvents(getEvents()); }}
+            className="active:scale-[0.97] transition-all"
+          >
+            <Sparkles className="w-4 h-4 mr-2" /> Sample Event
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-primary text-primary-foreground active:scale-[0.97] transition-all">
+                <Plus className="w-4 h-4 mr-2" /> New Event
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create Event</DialogTitle>
@@ -77,6 +86,7 @@ export default function EventsPage() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {events.length === 0 ? (
