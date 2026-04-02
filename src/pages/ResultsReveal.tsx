@@ -461,7 +461,7 @@ export default function ResultsReveal() {
           >
             <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} className="mb-2">
               <span className="inline-block px-4 py-1 rounded-full bg-accent/20 text-accent text-sm font-bold">
-                #{participantRank}
+                Participant {currentParticipantIdx + 1} of {revealOrder.length}
               </span>
             </motion.div>
 
