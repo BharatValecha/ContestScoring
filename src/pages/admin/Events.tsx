@@ -86,6 +86,7 @@ export default function EventsPage() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {events.length === 0 ? (
