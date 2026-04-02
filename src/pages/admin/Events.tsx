@@ -110,7 +110,7 @@ export default function EventsPage() {
                   <h3 className="font-semibold">{event.name}</h3>
                   <p className="text-sm text-muted-foreground mt-0.5">{event.description || "No description"}</p>
                   <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                    <span>{event.participantIds.length} participants</span>
+                    <span>{(event.participants || event.participantIds || []).length} participants</span>
                     <span>{event.judgeIds.length} judges</span>
                     <span>{event.criteria.length} criteria</span>
                   </div>
