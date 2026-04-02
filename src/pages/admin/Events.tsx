@@ -43,12 +43,7 @@ export default function EventsPage() {
           <h1 className="text-2xl font-bold">Events</h1>
           <p className="text-muted-foreground text-sm mt-1">Create and manage competition events</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-primary text-primary-foreground active:scale-[0.97] transition-all">
-              <Plus className="w-4 h-4 mr-2" /> New Event
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
           <Button
             variant="outline"
             onClick={() => { seedSampleEvent(); setEvents(getEvents()); }}
@@ -56,7 +51,12 @@ export default function EventsPage() {
           >
             <Sparkles className="w-4 h-4 mr-2" /> Sample Event
           </Button>
-          </DialogTrigger>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-primary text-primary-foreground active:scale-[0.97] transition-all">
+                <Plus className="w-4 h-4 mr-2" /> New Event
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create Event</DialogTitle>
