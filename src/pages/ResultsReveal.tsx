@@ -157,7 +157,14 @@ export default function ResultsReveal() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const confettiFired = useRef(false);
 
-  const revealOrder = useMemo(() => [...results].reverse(), [results]);
+  const revealOrder = useMemo(() => {
+    const shuffled = [...results];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }, [results]);
 
   useEffect(() => {
     if (!eventId) return;
@@ -454,7 +461,7 @@ export default function ResultsReveal() {
           >
             <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} className="mb-2">
               <span className="inline-block px-4 py-1 rounded-full bg-accent/20 text-accent text-sm font-bold">
-                #{participantRank}
+                Participant {currentParticipantIdx + 1} of {revealOrder.length}
               </span>
             </motion.div>
 
